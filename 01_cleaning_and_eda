@@ -1,0 +1,198 @@
+\# IBM HR Employee Attrition — Notebook 1: Cleaning & EDA
+\#\# Project Overview
+This analysis explores a dataset of 1,470 IBM employees to understand
+what factors are associated with employee attrition — when an employee
+voluntarily leaves the company\.
+Before drawing any conclusions, the first step is to verify the data
+is complete, accurate, and ready for analysis\. This notebook documents
+that quality check, mirroring \*\*Sections 1–2\*\* of the methodology report\.
+# Import pandas so python can function similar to excel
+
+import pandas as pd
+
+# Bring in the pandas library
+# "as pd" is a nickname — saves you typing "pandas" every time
+# From here on, whenever you write pd, Python knows you mean pandas
+# Load the CSV into a DataFrame
+
+df = pd.read_csv('WA_Fn-UseC_-HR-Employee-Attrition.csv')
+
+# pd.read_csv() opens the file
+# and converts it into a table
+# that Python can work with
+# "df" is just a variable name — short for "DataFrame"
+# A DataFrame is like a spreadsheet tab: rows, columns, headers
+# You could name it anything (attrition, data, hr) — df is just convention
+\#\# Section 1\.1 — Dataset Summary
+The first question in any people analysis is: what are we working with?
+We start by confirming the size of the dataset and the information
+available on each employee\.
+# Show the first 5 rows
+
+df.head()
+
+# Shows the first 5 rows of your DataFrame
+# Like scrolling to the top of a spreadsheet to confirm it loaded right
+# You're not changing anything — just looking
+# Count rows and columns
+
+print("Rows:", df.shape[0])
+print("Columns:", df.shape[1])
+
+# df.shape returns a tuple: (number of rows, number of columns)
+# .shape[0] is the row count, .shape[1] is the column count
+# Confirms the dataset loaded as expected: 1,470 employees × 35 fields
+The dataset contains \*\*1,470 employees\*\* across \*\*35 variables\*\*,
+including demographic information, job characteristics, compensation,
+and satisfaction scores\. This is a complete snapshot — every row
+represents one unique employee\.
+\#\# Section 2\.1 — Data Quality Checks
+We now run a series of validation checks before any analysis begins\.
+Each check tests a different way the data could be wrong:
+1\. Data types — are numbers stored as numbers and text as text?
+2\. Categorical values — any typos or unexpected entries?
+3\. Missing values — any empty cells?
+4\. Duplicate IDs — does each row represent a unique employee?
+5\. Age range — does anyone fall outside working age?
+6\. Income validity — is anyone's income zero or negative?
+7\. Impossible tenure — has anyone worked here longer than their full career?
+8\. Constant columns — which fields have no variation?
+9\. Performance rating range — are all rating values present?
+# Confirm Python is reading each column correctly
+# Numbers should be int64 or float64; text should be object
+
+df.dtypes
+
+# .dtypes returns the data type of every column
+# int64 = whole number (Age, MonthlyIncome)
+# object = text/string (Attrition, Department)
+# we want this output to match what we'd expect for each column
+# Inspect every text column for typos or unexpected values
+
+cat_cols = ['Attrition', 'BusinessTravel', 'Department', 'EducationField',
+            'Gender', 'JobRole', 'MaritalStatus', 'Over18', 'OverTime']
+
+for col in cat_cols:
+    print(f"\n{col}:", df[col].unique())
+
+# .unique() returns every distinct value found in that column
+# we loop through all 9 categorical columns and print them out
+# this is how you catch issues like 'Sales' vs 'sales' vs 'Sales '
+# we want clean, consistent values with no duplicates from typos
+# Count nulls in every column
+
+df.isnull().sum()
+
+# df.isnull() returns True wherever a cell is empty
+# .sum() counts the True values per column
+# every column should return 0
+# if anything's > 0, that column needs attention before analysis
+# Each row should represent exactly one employee
+# duplicate IDs would inflate headcount and skew attrition rates
+
+dupe_count = df['EmployeeNumber'].duplicated().sum()
+print("Duplicated Employee IDs:", dupe_count)
+
+# .duplicated() flags each repeat after the first occurrence
+# .sum() counts how many flags there are
+# 0 means every Employee ID is unique
+
+# Optional: surface the dupes if any exist
+if dupe_count > 0:
+    dupes = df[df['EmployeeNumber'].duplicated(keep=False)]
+    print(dupes[['EmployeeNumber', 'Age', 'Department']])
+else:
+    print("No duplicates — clean.")
+# Anyone outside working age (18-65) is a likely data error
+
+age_oor = df[(df['Age'] < 18) | (df['Age'] > 65)].shape[0]
+print("Age out of range:", age_oor)
+
+# df['Age'] < 18 — finds everyone under 18
+# df['Age'] > 65 — finds everyone over 65
+# | means OR — either condition flags the row
+# .shape[0] counts how many rows matched
+# 0 = no out-of-range ages
+# Nobody should have zero or negative monthly income
+
+bad_income = df[df['MonthlyIncome'] <= 0].shape[0]
+print("Negative or zero income:", bad_income)
+
+# <= means "less than or equal to"
+# 0 means every employee has a positive income value
+# An employee can't have worked at THIS company longer than their
+# entire career — that would be logically impossible
+
+impossible = df[df['YearsAtCompany'] > df['TotalWorkingYears']]
+print("Impossible tenure rows:", impossible.shape[0])
+
+# this compares two columns row by row
+# Python checks each row: is YearsAtCompany > TotalWorkingYears?
+# 0 means every record passes the logic check
+# Columns where every employee has the same value carry no
+# predictive information — flag them so we can exclude later
+
+print("StandardHours unique values:", df['StandardHours'].unique())
+print("EmployeeCount unique values:", df['EmployeeCount'].unique())
+print("Over18 unique values:        ", df['Over18'].unique())
+
+# .unique() returns every distinct value in that column
+# StandardHours = [80] for everyone
+# EmployeeCount = [1] for everyone
+# Over18 = ['Y'] for everyone
+# all three will be excluded from any modeling — they have zero variance
+# Confirm what values exist in PerformanceRating
+# this matters because if poor performers were rated and exited
+# then "attrition" might include performance-managed exits
+
+print("PerformanceRating unique values:", df['PerformanceRating'].unique())
+
+# the scale is documented as 1-4 (1=Low to 4=Outstanding)
+# but only values 3 and 4 appear in the data
+# this supports the assumption that observed attrition is voluntary
+# rather than performance-driven — there are no low ratings to begin with
+\#\#\# Data Quality Check Results
+\| Check \| Result \| Action \|
+\|\-\-\-\|\-\-\-\|\-\-\-\|
+\| Data types \| ✅ All correct \| None \|
+\| Categorical values \| ✅ All clean \| None \|
+\| Missing values \| ✅ None found \| No imputation needed \|
+\| Duplicate IDs \| ✅ None found \| All 1,470 records unique \|
+\| Age range \| ✅ All 18\-60 \| None \|
+\| Income validity \| ✅ All positive \| None \|
+\| Impossible tenure \| ✅ None found \| None \|
+\| Constant columns \| ⚠️ Identified \| Exclude \`StandardHours\`, \`EmployeeCount\`, \`Over18\` \|
+\| PerformanceRating range \| ⚠️ Limited \(3\-4 only\) \| Supports voluntary\-attrition assumption \|
+The dataset is clean and ready for analysis\.
+\#\# Section 2\.2 — Target Variable Construction
+The \`Attrition\` column is text \(\`'Yes'\` / \`'No'\`\)\. Before any modeling
+or aggregation, we convert it to a binary numeric flag where
+\`1 = left\` and \`0 = stayed\`\. This single conversion lets us:
+\- Calculate attrition rate as a simple \`\.mean\(\)\`
+\- Use the column directly as a target variable in modeling
+\- Sum the column to get a count of departures
+# Convert Attrition (text) to Attrition_Flag (binary 1/0)
+
+df['Attrition_Flag'] = (df['Attrition'] == 'Yes').astype(int)
+
+# (df['Attrition'] == 'Yes') returns True / False per row
+# .astype(int) converts True → 1 and False → 0
+# we keep the original Attrition column too — both are useful
+
+# Confirm the conversion worked
+print(df['Attrition_Flag'].value_counts())
+print(f"\nOverall attrition rate: {df['Attrition_Flag'].mean()*100:.2f}%")
+
+# value_counts() shows the count of 0s and 1s
+# .mean() of a 0/1 column is the proportion of 1s — the attrition rate
+# we expect roughly 16% based on the published dataset description
+The conversion produced \*\*237 leavers\*\* \(1\) and \*\*1,233 stayers\*\* \(0\),
+for an overall attrition rate of \*\*16\.12%\*\*\. This 84/16 class imbalance
+is a critical methodological consideration that will be addressed
+in \*\*Notebook 4 \(Predictive Modeling\)\*\* through SMOTE and threshold
+tuning, and through F1\-based scoring rather than accuracy\.
+The dataset is now clean, validated, and ready for the descriptive
+segmentation analysis in \*\*Notebook 2\*\*\.
+<a style='text-decoration:none;line-height:16px;display:flex;color:#5B5B62;padding:10px;justify-content:end;' href='https://deepnote.com?utm_source=created-in-deepnote-cell&projectId=01782b8c-21ad-4a9f-9322-6be507743988' target="_blank">
+<img alt='Created in deepnote.com' style='display:inline;max-height:16px;margin:0px;margin-right:7.5px;' src='data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB3aWR0aD0iODBweCIgaGVpZ2h0PSI4MHB4IiB2aWV3Qm94PSIwIDAgODAgODAiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayI+CiAgICA8IS0tIEdlbmVyYXRvcjogU2tldGNoIDU0LjEgKDc2NDkwKSAtIGh0dHBzOi8vc2tldGNoYXBwLmNvbSAtLT4KICAgIDx0aXRsZT5Hcm91cCAzPC90aXRsZT4KICAgIDxkZXNjPkNyZWF0ZWQgd2l0aCBTa2V0Y2guPC9kZXNjPgogICAgPGcgaWQ9IkxhbmRpbmciIHN0cm9rZT0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIxIiBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPgogICAgICAgIDxnIGlkPSJBcnRib2FyZCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTEyMzUuMDAwMDAwLCAtNzkuMDAwMDAwKSI+CiAgICAgICAgICAgIDxnIGlkPSJHcm91cC0zIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMjM1LjAwMDAwMCwgNzkuMDAwMDAwKSI+CiAgICAgICAgICAgICAgICA8cG9seWdvbiBpZD0iUGF0aC0yMCIgZmlsbD0iIzAyNjVCNCIgcG9pbnRzPSIyLjM3NjIzNzYyIDgwIDM4LjA0NzY2NjcgODAgNTcuODIxNzgyMiA3My44MDU3NTkyIDU3LjgyMTc4MjIgMzIuNzU5MjczOSAzOS4xNDAyMjc4IDMxLjY4MzE2ODMiPjwvcG9seWdvbj4KICAgICAgICAgICAgICAgIDxwYXRoIGQ9Ik0zNS4wMDc3MTgsODAgQzQyLjkwNjIwMDcsNzYuNDU0OTM1OCA0Ny41NjQ5MTY3LDcxLjU0MjI2NzEgNDguOTgzODY2LDY1LjI2MTk5MzkgQzUxLjExMjI4OTksNTUuODQxNTg0MiA0MS42NzcxNzk1LDQ5LjIxMjIyODQgMjUuNjIzOTg0Niw0OS4yMTIyMjg0IEMyNS40ODQ5Mjg5LDQ5LjEyNjg0NDggMjkuODI2MTI5Niw0My4yODM4MjQ4IDM4LjY0NzU4NjksMzEuNjgzMTY4MyBMNzIuODcxMjg3MSwzMi41NTQ0MjUgTDY1LjI4MDk3Myw2Ny42NzYzNDIxIEw1MS4xMTIyODk5LDc3LjM3NjE0NCBMMzUuMDA3NzE4LDgwIFoiIGlkPSJQYXRoLTIyIiBmaWxsPSIjMDAyODY4Ij48L3BhdGg+CiAgICAgICAgICAgICAgICA8cGF0aCBkPSJNMCwzNy43MzA0NDA1IEwyNy4xMTQ1MzcsMC4yNTcxMTE0MzYgQzYyLjM3MTUxMjMsLTEuOTkwNzE3MDEgODAsMTAuNTAwMzkyNyA4MCwzNy43MzA0NDA1IEM4MCw2NC45NjA0ODgyIDY0Ljc3NjUwMzgsNzkuMDUwMzQxNCAzNC4zMjk1MTEzLDgwIEM0Ny4wNTUzNDg5LDc3LjU2NzA4MDggNTMuNDE4MjY3Nyw3MC4zMTM2MTAzIDUzLjQxODI2NzcsNTguMjM5NTg4NSBDNTMuNDE4MjY3Nyw0MC4xMjg1NTU3IDM2LjMwMzk1NDQsMzcuNzMwNDQwNSAyNS4yMjc0MTcsMzcuNzMwNDQwNSBDMTcuODQzMDU4NiwzNy43MzA0NDA1IDkuNDMzOTE5NjYsMzcuNzMwNDQwNSAwLDM3LjczMDQ0MDUgWiIgaWQ9IlBhdGgtMTkiIGZpbGw9IiMzNzkzRUYiPjwvcGF0aD4KICAgICAgICAgICAgPC9nPgogICAgICAgIDwvZz4KICAgIDwvZz4KPC9zdmc+' />
+Created in <span style='font-weight:600;margin-left:4px;'>Deepnote</span></a>
